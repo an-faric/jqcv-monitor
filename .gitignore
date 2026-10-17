@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+*.log
+.last_content.txt.*
+
+# last_content.txt DEBE conservarse en Git para persistir entre ejecuciones.
