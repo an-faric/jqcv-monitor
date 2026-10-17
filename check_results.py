@@ -58,14 +58,16 @@ def fetch_html() -> bytes:
         total=3, backoff_factor=2,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods={"GET"}, respect_retry_after_header=False,
+        # Permite informar del último HTTP 429/5xx, en vez de ocultarlo en RetryError.
+        raise_on_status=False,
     )
     try:
         with requests.Session() as session:
             session.mount("https://", HTTPAdapter(max_retries=retries))
             response = session.get(
-                URL, timeout=(10, 30),
+                URL, timeout=(20, 60),
                 headers={
-                    "User-Agent": "JQCVResultsMonitor/1.0 (public results checker)",
+                    "User-Agent": "Mozilla/5.0 (compatible; JQCVResultsMonitor/1.1)",
                     "Accept": "text/html,application/xhtml+xml",
                     "Accept-Language": "es-ES,es;q=0.9",
                     "Cache-Control": "no-cache",
@@ -79,8 +81,31 @@ def fetch_html() -> bytes:
                 raise MonitorError("La respuesta no es una página HTML válida.")
             return response.content
     except requests.RequestException as exc:
-        status = exc.response.status_code if exc.response is not None else "sin respuesta"
-        raise MonitorError(f"No se pudo descargar la página (HTTP {status}).") from exc
+        detail = normalize(str(exc))
+        lower = detail.lower()
+        if exc.response is not None:
+            cause = f"HTTP {exc.response.status_code}"
+        elif isinstance(exc, requests.exceptions.SSLError) or "sslerror" in lower:
+            cause = "fallo TLS/certificado"
+        elif any(term in lower for term in (
+            "nameresolutionerror", "getaddrinfo failed", "name or service not known",
+            "temporary failure in name resolution",
+        )):
+            cause = "fallo de resolución DNS"
+        elif isinstance(exc, requests.exceptions.Timeout) or "timeout" in lower or "timed out" in lower:
+            cause = "tiempo de espera agotado"
+        else:
+            cause = "fallo de conexión o de transporte"
+        # Solo se muestra el diagnóstico HTTP, nunca contraseñas o direcciones de correo.
+        detail = re.sub(r"(?i)(https?://)[^/\s@]+@", r"\1[oculto]@", detail)
+        for name in ("EMAIL_USER", "EMAIL_PASSWORD", "EMAIL_TO"):
+            value = os.environ.get(name, "")
+            if value:
+                detail = detail.replace(value, "[oculto]")
+        raise MonitorError(
+            f"No se pudo descargar la página ({cause}). "
+            f"Detalle: {type(exc).__name__}: {detail[:1500]}"
+        ) from exc
 
 
 def extract_content(html: bytes | str, selector: str = DEFAULT_SELECTOR) -> str:
