@@ -22,6 +22,8 @@ Conclusión confirmada: en esa ejecución no se estableció una conexión TCP ut
 
 ## Historial observado
 
+La [ejecución #9, 39152065947](https://github.com/an-faric/jqcv-monitor/actions/runs/39152065947), commit `967258d`, terminó correctamente en GitHub Actions con Python 3.13 y la suite ampliada de 68 pruebas. Su job [117747584964](https://github.com/an-faric/jqcv-monitor/actions/runs/39152065947/job/117747584964) confirma instalación y pruebas correctas. Fue una validación del código: diagnóstico de red, vista previa y correo quedaron omitidos, igual que el job de persistencia. Ese resultado correcto no acredita acceso a la JQCV.
+
 Los metadatos públicos de las ejecuciones #2–#5 muestran fallos del monitor en Ubuntu; [#6](https://github.com/an-faric/jqcv-monitor/actions/runs/39052849863) y [#7](https://github.com/an-faric/jqcv-monitor/actions/runs/39127671837) también fallaron tras cambiar a macOS. El texto detallado de esos errores lo aportó el usuario; la revisión pública confirmó las etapas fallidas, sin poder releer los logs completos. La ejecución #1 correcta no permite conocer públicamente su modo y no se usa como evidencia de acceso a la web.
 
 ## Codex: resultado distinto
