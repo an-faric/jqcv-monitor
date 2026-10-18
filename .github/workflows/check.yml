@@ -58,7 +58,7 @@ jobs:
       - name: Diagnosticar DNS, TCP, TLS y HTTP
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.mode == 'diagnose') ||
-          github.event_name == 'push'
+          (github.event_name == 'push' && github.event.created == true)
         env:
           RESULTS_URL: ${{ vars.RESULTS_URL || 'https://jqcv.gva.es/es/resultats' }}
           PYTHONUNBUFFERED: '1'
@@ -67,7 +67,7 @@ jobs:
       - name: Mostrar publicaciones C1 extraídas
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.mode == 'preview') ||
-          github.event_name == 'push'
+          (github.event_name == 'push' && github.event.created == true)
         env:
           RESULTS_URL: ${{ vars.RESULTS_URL || 'https://jqcv.gva.es/es/resultats' }}
           RESULTS_SELECTOR: ${{ vars.RESULTS_SELECTOR || 'ul.list-group.show-quick-actions-on-hover' }}

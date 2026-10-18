@@ -42,9 +42,9 @@ FUTURE_PUBLICATION = re.compile(
     r"es\s+publicar(?:a|an)|se\s+publicar(?:a|an)|"
     r"publicacio\s+prevista|publicacion\s+prevista|"
     r"data\s+prevista|fecha\s+prevista|"
-    r"previst[aoe]s?|previsio|prevision|"
-    r"a\s+partir\s+(?:de|del)|"
-    r"abans\s+de|antes\s+de"
+    r"previsio[n]?\s+de\s+publicacio[n]?|"
+    r"(?:consulta|publicacio[n]?)[^.!?]{0,80}"
+    r"(?:resultats?|resultados?|qualificacions|calificaciones)[^.!?]{0,80}a\s+partir"
     r")\b"
 )
 TIMING_WORDS = re.compile(
@@ -333,6 +333,31 @@ def _phase(text: str) -> str:
     return "unknown"
 
 
+def _publication_years(node, container, item_text: str) -> set[str]:
+    """El año de convocatoria tiene precedencia sobre la fecha de una noticia."""
+    call_years = set(re.findall(
+        r"\bconvocatoria\s+(?:(?:de|del|de l'any|del ano)\s+)?(20\d{2})\b",
+        fold(item_text),
+    ))
+    if call_years:
+        return call_years
+    title_nodes = node.select("h1, h2, h3, h4, h5, h6, a[href]")
+    title_years = set(re.findall(
+        r"(?<!\d)20\d{2}(?!\d)",
+        " ".join(element.get_text(" ", strip=True) for element in title_nodes),
+    ))
+    if title_years:
+        return title_years
+    for current in [node, *node.parents]:
+        declared = str(current.get("data-year", ""))
+        if re.fullmatch(r"20\d{2}", declared):
+            return {declared}
+        if current is container:
+            break
+    context_years = set(re.findall(r"(?<!\d)20\d{2}(?!\d)", _nearest_heading_text(container)))
+    return context_years or set(re.findall(r"(?<!\d)20\d{2}(?!\d)", item_text))
+
+
 def _announcement_timing(text: str) -> str | None:
     sentences = re.split(r"(?<=[.!?;])\s+|[\r\n]+", normalize(text))
     for sentence in sentences:
@@ -408,14 +433,7 @@ def _make_publication(node, container, config: MonitorConfig) -> Publication | N
     if not _level_pattern(config.target_level).search(folded_context):
         return None
 
-    call_years = set(re.findall(
-        r"\bconvocatoria\s+(?:(?:de|del|de l'any|del ano)\s+)?(20\d{2})\b",
-        fold(item_text),
-    ))
-    explicit_years = call_years or set(re.findall(r"(?<!\d)20\d{2}(?!\d)", item_text))
-    if explicit_years and config.target_year not in explicit_years:
-        return None
-    if not re.search(rf"(?<!\d){re.escape(config.target_year)}(?!\d)", context):
+    if config.target_year not in _publication_years(node, container, item_text):
         return None
 
     timing = _announcement_timing(item_text)
@@ -864,6 +882,10 @@ def _publication_lines(publication: Publication) -> list[str]:
         lines.append(f"Fecha o plazo anunciado (texto oficial): {publication.announced_timing}")
     if publication.official_published_at:
         lines.append(f"Fecha de publicación indicada por la fuente: {publication.official_published_at}")
+    for target in publication.resource_urls:
+        if target != publication.url:
+            lines.append(f"Otro enlace oficial: {target}")
+    lines.append(f"Texto de la publicación: {publication.evidence[:1_500]}")
     return lines
 
 

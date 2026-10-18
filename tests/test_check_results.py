@@ -122,6 +122,15 @@ class ExtractionTests(unittest.TestCase):
         self.assertIn("30 d'octubre de 2026", publication.announced_timing)
         self.assertIsNone(publication.official_published_at)
 
+    def test_deadline_for_claims_does_not_become_a_publication_date(self):
+        page = synthetic_page(result_item(
+            "Resultados provisionales C1 convocatoria 2026 disponibles. "
+            "Reclamaciones a partir del 30 de octubre de 2026."
+        ))
+        publication = monitor.extract_publications(page, CONFIG).publications[0]
+        self.assertEqual(publication.kind, "results")
+        self.assertIsNone(publication.announced_timing)
+
     def test_unlabelled_time_is_not_called_an_official_publication_date(self):
         page = synthetic_page("""
           <li><time datetime="2026-10-16">Data de la prova</time>
@@ -158,6 +167,20 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(publication.year, "2026")
         self.assertEqual(publication.kind, "date_announcement")
         self.assertIn("2027", publication.announced_timing)
+
+    def test_january_publication_keeps_previous_call_year_from_section(self):
+        page = synthetic_page(
+            '<li><time itemprop="datePublished" datetime="2027-01-12">12/01/2027</time>'
+            '<a href="/c1.pdf">Resultados definitivos C1</a></li>'
+        )
+        publication = monitor.extract_publications(page, CONFIG).publications[0]
+        self.assertEqual(publication.year, "2026")
+        self.assertEqual(publication.official_published_at, "2027-01-12")
+
+    def test_maintenance_inside_a_valid_selector_still_fails(self):
+        page = synthetic_page('<li>Servicio no disponible por mantenimiento.</li>')
+        with self.assertRaisesRegex(monitor.MonitorError, "mantenimiento"):
+            monitor.extract_publications(page, CONFIG)
 
     def test_foreign_links_are_not_presented_as_official_results(self):
         page = synthetic_page(result_item(href="https://example.com/unverified.pdf"))

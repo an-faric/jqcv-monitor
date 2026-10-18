@@ -23,6 +23,8 @@ Hechos comprobados el 18 de octubre de 2026:
 
 No hay evidencia suficiente para atribuir el fallo a geobloqueo, Azure, filtrado de bots, IPv6 o certificados. El modo `diagnose` permite separar esas fases en el runner real.
 
+La nueva [ejecución #8](https://github.com/an-faric/jqcv-monitor/actions/runs/39151806527) sí ejecutó el diagnóstico desde Ubuntu alojado: pasaron las 65 pruebas de ese commit, pero TCP y curl IPv4 agotaron la espera y Python terminó con `ConnectTimeout`, sin respuesta HTTP. La evidencia y los límites de esa conclusión están en [DIAGNOSTICO.md](DIAGNOSTICO.md). El acceso sigue sin resolverse y no se ha validado el selector.
+
 ## Qué detecta
 
 La configuración inicial es `TARGET_LEVEL=C1` y `TARGET_YEAR=2026`. El año es explícito: no cambia automáticamente al llegar enero, porque una convocatoria puede publicar resultados durante el año siguiente.
@@ -56,7 +58,7 @@ En **Actions → Comprobar resultados C1 JQCV → Run workflow** están disponib
 
 El workflow ejecuta primero la suite de pruebas. `diagnose`, `preview` y `test-email` tienen permiso de lectura; solo el job `check` recibe `contents: write`. Los secretos SMTP se entregan exclusivamente a los pasos que envían correo.
 
-La rama de desarrollo `codex/jqcv-c1-monitor` ejecuta automáticamente las pruebas, `diagnose` y, solo si este pasa, `preview` al subir cambios de código. No envía correo ni persiste estado. Esto permite validar la implementación antes de incorporarla a la rama predeterminada.
+Al crear la rama de desarrollo `codex/jqcv-c1-monitor` se ejecutan automáticamente las pruebas, `diagnose` y, solo si este pasa, `preview`. Los siguientes cambios de código ejecutan las pruebas; el diagnóstico también está disponible manualmente. No se envía correo ni se persiste estado. Esto permite validar la implementación antes de incorporarla a la rama predeterminada.
 
 ### Secuencia mínima de activación
 
@@ -150,7 +152,7 @@ Una frecuencia de 15 minutos (`7,22,37,52 * * * *`) solo debe activarse después
 
 Las pruebas cubren filtrado por nivel/año, fases, anuncios de fecha, cambios de texto, enlaces y versiones, normalización, deduplicación, ausencia de cambios, migración, protección del estado, fallos HTTP/TLS/timeouts, SMTP y diagnóstico sin efectos secundarios. La persistencia también se prueba con repositorios Git temporales: creación y lectura de la rama de estado, segunda ejecución sin commit y conservación de la rama de código.
 
-Todos los HTML de `tests/fixtures` son sintéticos. Las pruebas con mocks demuestran comportamiento controlado del código, pero no acceso actual a la JQCV. Para considerar operativo el sistema faltan evidencias de Actions de `diagnose`, `preview`, `test-email`, persistencia y dos comprobaciones sin cambios.
+Todos los HTML de `tests/fixtures` son sintéticos. Las pruebas con mocks demuestran comportamiento controlado del código, pero no acceso actual a la JQCV. Para considerar operativo el sistema faltan un `diagnose` satisfactorio, `preview`, `test-email`, persistencia y dos comprobaciones sin cambios en Actions.
 
 ## Referencias oficiales
 
