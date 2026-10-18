@@ -1,14 +1,30 @@
 <!doctype html>
+<!-- Fixture sintética: no es una captura ni evidencia de acceso a la JQCV. -->
 <html lang="es">
-<head><meta charset="utf-8"><title>Ejemplo sintético de resultados</title></head>
+<head><meta charset="utf-8"><title>Fixture sintética de resultados</title></head>
 <body>
-  <nav><a href="/es/noticias">Novedad fuera de resultados</a></nav>
+  <nav><a href="/es/requisits-c1">El C1 es requisito para otra prueba en 2026</a></nav>
   <main>
-    <h1>Resultados de las pruebas de la JQCV</h1>
-    <ul class="list-group show-quick-actions-on-hover">
-      <li><a href="/documents/123/resultados-c1.pdf?p_auth=TOKEN1&amp;version=1.0">Resultados C1</a></li>
-      <li><a href="/documents/123/resultados-c2.pdf">Resultados C2</a><span>Convocatoria de octubre</span></li>
-    </ul>
+    <h1>Resultats de les proves de la JQCV</h1>
+    <section>
+      <h2>Convocatòria 2026</h2>
+      <ul class="list-group show-quick-actions-on-hover" data-year="2026">
+        <li data-id="c1-current">
+          <time itemprop="datePublished" datetime="2026-10-16T09:00:00+02:00">16/10/2026</time>
+          <a href="/documents/123/resultats-c1.pdf?p_auth=TOKEN1&amp;version=1.0&amp;utm_source=test">Resultats provisionals C1</a>
+          <span>Convocatòria 2026</span>
+        </li>
+        <li data-id="c2-current">
+          <a href="/documents/123/resultats-c2.pdf">Resultados definitivos C2 - convocatoria 2026</a>
+        </li>
+        <li data-id="c1-old">
+          <a href="/documents/122/resultats-c1.pdf">Resultados finales C1 - convocatoria 2025</a>
+        </li>
+        <li data-id="irrelevant">
+          <a href="/es/altres-proves">El C1 es requisito para otra prueba en 2026</a>
+        </li>
+      </ul>
+    </section>
   </main>
   <footer>Último acceso: 09:00</footer>
 </body>

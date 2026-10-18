@@ -1,35 +1,127 @@
-name: Comprobar resultados JQCV
+name: Comprobar resultados C1 JQCV
 
 on:
   schedule:
-    - cron: '0 8 * * *' # Todos los días a las 08:00 UTC.
+    # Se mantiene una ejecución diaria hasta verificar el acceso desde este runner.
+    - cron: '0 8 * * *'
   workflow_dispatch:
     inputs:
       mode:
-        description: 'check: vigilar; preview: ver la lista; test-email: probar SMTP'
+        description: 'diagnose: red; preview: extracción; test-email: SMTP; check: vigilar'
         required: true
-        default: check
+        default: diagnose
         type: choice
         options:
-          - check
+          - diagnose
           - preview
           - test-email
+          - check
+  pull_request:
+  push:
+    branches:
+      - codex/jqcv-c1-monitor
+    paths:
+      - '*.py'
+      - requirements.txt
+      - .github/workflows/check.yml
+      - tests/**
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: jqcv-results
+  group: jqcv-results-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  check:
-    # Ejecuta el monitor únicamente desde la rama predeterminada.
-    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-    runs-on: macos-latest
-    timeout-minutes: 10
+  validate:
+    name: Pruebas y operación manual sin estado
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
     steps:
       - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      - name: Preparar Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Instalar dependencias
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Validar dependencias y ejecutar pruebas
+        run: |
+          python -m pip check
+          python -m unittest discover -s tests -v
+
+      - name: Diagnosticar DNS, TCP, TLS y HTTP
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.mode == 'diagnose') ||
+          github.event_name == 'push'
+        env:
+          RESULTS_URL: ${{ vars.RESULTS_URL || 'https://jqcv.gva.es/es/resultats' }}
+          PYTHONUNBUFFERED: '1'
+        run: timeout 180s python diagnose_access.py
+
+      - name: Mostrar publicaciones C1 extraídas
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.mode == 'preview') ||
+          github.event_name == 'push'
+        env:
+          RESULTS_URL: ${{ vars.RESULTS_URL || 'https://jqcv.gva.es/es/resultats' }}
+          RESULTS_SELECTOR: ${{ vars.RESULTS_SELECTOR || 'ul.list-group.show-quick-actions-on-hover' }}
+          RESULTS_ITEM_SELECTOR: ${{ vars.RESULTS_ITEM_SELECTOR || ':scope > li' }}
+          TARGET_LEVEL: ${{ vars.TARGET_LEVEL || 'C1' }}
+          TARGET_YEAR: ${{ vars.TARGET_YEAR || '2026' }}
+          PYTHONUNBUFFERED: '1'
+        run: python check_results.py --preview
+
+      - name: Probar exclusivamente el correo SMTP
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'test-email'
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SMTP_HOST: ${{ vars.SMTP_HOST || 'smtp.gmail.com' }}
+          SMTP_PORT: ${{ vars.SMTP_PORT || '587' }}
+          SMTP_SECURITY: ${{ vars.SMTP_SECURITY || 'starttls' }}
+          RESULTS_URL: ${{ vars.RESULTS_URL || 'https://jqcv.gva.es/es/resultats' }}
+          TARGET_LEVEL: ${{ vars.TARGET_LEVEL || 'C1' }}
+          TARGET_YEAR: ${{ vars.TARGET_YEAR || '2026' }}
+          PYTHONUNBUFFERED: '1'
+        run: python check_results.py --test-email
+
+  invalid-check-ref:
+    name: Rechazar check fuera de la rama predeterminada
+    needs: validate
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.mode == 'check' &&
+      github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Explicar la restricción
+        run: |
+          echo 'El modo check envía correo y persiste estado; ejecútalo en la rama predeterminada.' >&2
+          exit 1
+
+  monitor:
+    name: Vigilar y persistir el estado
+    needs: validate
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' &&
+       inputs.mode == 'check' &&
+       github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - name: Descargar la rama predeterminada con historial
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -41,9 +133,15 @@ jobs:
           python-version: '3.13'
 
       - name: Instalar dependencias
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      - name: Comprobar la lista o ejecutar una prueba manual
+      - name: Recuperar la referencia persistente
+        env:
+          STATE_BRANCH: ${{ vars.STATE_BRANCH || 'jqcv-monitor-state' }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python state_store.py load
+
+      - name: Comprobar publicaciones del C1
         env:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
@@ -51,38 +149,16 @@ jobs:
           SMTP_HOST: ${{ vars.SMTP_HOST || 'smtp.gmail.com' }}
           SMTP_PORT: ${{ vars.SMTP_PORT || '587' }}
           SMTP_SECURITY: ${{ vars.SMTP_SECURITY || 'starttls' }}
+          RESULTS_URL: ${{ vars.RESULTS_URL || 'https://jqcv.gva.es/es/resultats' }}
           RESULTS_SELECTOR: ${{ vars.RESULTS_SELECTOR || 'ul.list-group.show-quick-actions-on-hover' }}
-          MODE: ${{ inputs.mode || 'check' }}
+          RESULTS_ITEM_SELECTOR: ${{ vars.RESULTS_ITEM_SELECTOR || ':scope > li' }}
+          TARGET_LEVEL: ${{ vars.TARGET_LEVEL || 'C1' }}
+          TARGET_YEAR: ${{ vars.TARGET_YEAR || '2026' }}
           PYTHONUNBUFFERED: '1'
-        run: |
-          case "$MODE" in
-            check) python check_results.py ;;
-            preview) python check_results.py --dry-run ;;
-            test-email) python check_results.py --test-email ;;
-            *) echo "Modo desconocido" >&2; exit 1 ;;
-          esac
+        run: python check_results.py
 
-      - name: Guardar el nuevo estado si ha cambiado
+      - name: Guardar únicamente el estado si ha cambiado
         env:
+          STATE_BRANCH: ${{ vars.STATE_BRANCH || 'jqcv-monitor-state' }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: |
-          if [ ! -f last_content.txt ]; then
-            echo "No hay estado que guardar."
-            exit 0
-          fi
-          git add -- last_content.txt
-          if git diff --cached --quiet -- last_content.txt; then
-            echo "El estado no ha cambiado."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Actualizar estado de resultados JQCV"
-          for attempt in 1 2 3; do
-            git pull --rebase origin "$DEFAULT_BRANCH"
-            if git push origin "HEAD:$DEFAULT_BRANCH"; then
-              exit 0
-            fi
-          done
-          echo "No se pudo guardar el estado en GitHub." >&2
-          exit 1
+        run: python state_store.py save
